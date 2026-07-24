@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#12161d">
+<title>Warrant — a sourced atlas of Freemasonry</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Libre+Caslon+Display&family=Libre+Caslon+Text:ital,wght@0,400;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+
+:root{
+  --slate:#12161d;
+  --slate-deep:#0a0d12;
+  --slate-raise:#1a2029;
+  --chalk:#e7e5dc;
+  --chalk-dim:#9aa0a6;
+  --craft:#7fa9c8;
+  --ochre:#c08b3e;
+  --clay:#a4553f;
+  --rule:rgba(231,229,220,0.14);
+  --rule-soft:rgba(231,229,220,0.07);
+}
+
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:'Libre Caslon Text',Georgia,serif;
+  background:var(--slate-deep);
+  color:var(--chalk);
+  -webkit-font-smoothing:antialiased;
+}
+.mono{font-family:'IBM Plex Mono',ui-monospace,monospace}
+.display{font-family:'Libre Caslon Display',Georgia,serif}
+
+#map{position:fixed;inset:0;z-index:1;background:var(--slate-deep)}
+.leaflet-container{background:var(--slate-deep);font-family:'IBM Plex Mono',monospace}
+.leaflet-tile-pane{filter:brightness(.86) contrast(1.08) saturate(.5)}
+#wash{position:fixed;inset:0;z-index:2;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 40%,rgba(127,169,200,.09),transparent 62%)}
+.leaflet-control-attribution{
+  background:rgba(10,13,18,.82)!important;color:#6f767e!important;
+  font-size:9px!important;border-top:1px solid var(--rule-soft)}
+.leaflet-control-attribution a{color:#8d959d!important}
+
+/* ---------- masthead ---------- */
+.top{
+  position:fixed;top:0;left:0;right:0;z-index:900;pointer-events:none;
+  padding:calc(env(safe-area-inset-top) + 12px) 14px 20px;
+  background:linear-gradient(180deg,rgba(10,13,18,.95) 0%,rgba(10,13,18,.72) 62%,transparent 100%);
+}
+.top > *{pointer-events:auto}
+.mast{display:flex;align-items:flex-end;gap:11px;flex-wrap:wrap}
+.mast h1{
+  font-family:'Libre Caslon Display',serif;font-size:1.32rem;font-weight:400;
+  letter-spacing:.19em;color:var(--chalk);line-height:1;text-indent:.19em}
+.mast .sub{
+  font-family:'IBM Plex Mono',monospace;font-size:.6rem;letter-spacing:.11em;
+  color:#79808a;text-transform:uppercase;padding-bottom:2px}
+
+/* running tally — the thesis as a live number */
+.tally{
+  display:flex;gap:14px;margin-top:9px;
+  font-family:'IBM Plex Mono',monospace;font-size:.63rem;letter-spacing:.05em}
+.tally span{color:#79808a}
+.tally b{font-weight:500}
+.tally .t-rec b{color:var(--chalk)}
+.tally .t-dis b{color:var(--ochre)}
+.tally .t-leg b{color:var(--clay)}
+
+.filters{display:flex;gap:7px;margin-top:12px;overflow-x:auto;padding-bottom:3px;
+  scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.f{
+  flex-shrink:0;background:rgba(18,22,29,.86);border:1px solid var(--rule);
+  color:#8f969e;padding:6px 13px;border-radius:2px;cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;font-size:.66rem;letter-spacing:.07em;
+  text-transform:uppercase;transition:border-color .2s,color .2s,background .2s;
+  backdrop-filter:blur(7px);display:flex;align-items:center;gap:7px}
+.f:hover{color:var(--chalk)}
+.f:focus-visible{outline:2px solid var(--craft);outline-offset:2px}
+.f .glyph{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.f[data-g="recorded"] .glyph{background:var(--chalk)}
+.f[data-g="disputed"] .glyph{border:1.5px dashed var(--ochre)}
+.f[data-g="legend"] .glyph{border:1.5px dotted var(--clay)}
+.f.on{background:rgba(127,169,200,.13);border-color:var(--craft);color:var(--chalk)}
+.f.link-f.on{border-color:var(--craft);background:rgba(127,169,200,.16)}
+
+/* ---------- markers: rendering encodes evidence grade ---------- */
+.pin-wrap{background:none;border:none}
+.pin{
+  width:19px;height:19px;border-radius:50%;cursor:pointer;
+  transition:transform .22s ease;position:relative;
+  animation:settle .5s cubic-bezier(.2,.8,.3,1) backwards}
+@keyframes settle{from{opacity:0;transform:scale(.4)}to{opacity:1;transform:scale(1)}}
+.pin:hover{transform:scale(1.35)}
+.pin-recorded{background:var(--chalk);border:1px solid rgba(10,13,18,.5);
+  box-shadow:0 0 0 3px rgba(231,229,220,.13),0 2px 7px rgba(0,0,0,.6)}
+.pin-disputed{background:rgba(192,139,62,.12);border:1.5px dashed var(--ochre);
+  box-shadow:0 2px 7px rgba(0,0,0,.5)}
+.pin-legend{background:transparent;border:1.5px dotted var(--clay);opacity:.85}
+.pin.sel{transform:scale(1.45)}
+.pin.sel::after{content:"";position:absolute;inset:-8px;border-radius:50%;
+  border:1px solid var(--craft);opacity:.6}
+
+.leaflet-popup-content-wrapper{background:var(--slate-raise);border:1px solid var(--rule);
+  border-radius:2px;box-shadow:0 6px 22px rgba(0,0,0,.7)}
+.leaflet-popup-content{margin:8px 12px;font-family:'IBM Plex Mono',monospace;
+  font-size:.68rem;letter-spacing:.05em;color:var(--chalk)}
+.leaflet-popup-tip{background:var(--slate-raise)}
+.leaflet-popup-close-button{display:none}
+
+/* ---------- catalogue card ---------- */
+.card{
+  position:fixed;bottom:0;left:0;right:0;z-index:1100;
+  background:var(--slate);border-top:1px solid var(--rule);
+  border-radius:12px 12px 0 0;box-shadow:0 -8px 34px rgba(0,0,0,.72);
+  transform:translateY(101%);transition:transform .42s cubic-bezier(.32,.72,0,1);
+  max-height:84vh;display:flex;flex-direction:column;
+  padding-bottom:env(safe-area-inset-bottom)}
+.card.open{transform:translateY(0)}
+.grip{padding:11px 0 5px;display:flex;justify-content:center;cursor:pointer;flex-shrink:0}
+.grip span{width:38px;height:3px;border-radius:2px;background:var(--rule)}
+.grip:focus-visible{outline:2px solid var(--craft);outline-offset:-4px}
+.card-body{overflow-y:auto;padding:6px 22px 30px;overscroll-behavior:contain}
+
+/* card head: shelfmark + grade stamp, like an archive slip */
+.slip{display:flex;justify-content:space-between;align-items:center;gap:12px;
+  padding-bottom:9px;border-bottom:1px solid var(--rule)}
+.shelf{font-family:'IBM Plex Mono',monospace;font-size:.6rem;letter-spacing:.16em;
+  color:#6f767e;text-transform:uppercase}
+.stamp{font-family:'IBM Plex Mono',monospace;font-size:.58rem;letter-spacing:.16em;
+  text-transform:uppercase;padding:3px 9px;border-radius:1px;white-space:nowrap}
+.stamp-recorded{color:var(--chalk);border:1px solid rgba(231,229,220,.5)}
+.stamp-disputed{color:var(--ochre);border:1px dashed var(--ochre)}
+.stamp-legend{color:var(--clay);border:1px dotted var(--clay)}
+
+.c-year{font-family:'IBM Plex Mono',monospace;font-size:.72rem;letter-spacing:.2em;
+  color:var(--craft);margin-top:20px}
+.c-name{font-family:'Libre Caslon Display',serif;font-size:1.62rem;line-height:1.18;
+  margin-top:7px;color:var(--chalk)}
+.c-where{font-family:'IBM Plex Mono',monospace;font-size:.64rem;letter-spacing:.09em;
+  color:#79808a;margin-top:8px;text-transform:uppercase}
+
+.c-claim{font-size:1.05rem;line-height:1.55;margin-top:19px;color:var(--chalk);
+  font-style:italic}
+.c-detail{font-size:.97rem;line-height:1.68;margin-top:15px;color:#c2c0b8}
+
+.c-head{font-family:'IBM Plex Mono',monospace;font-size:.6rem;letter-spacing:.2em;
+  text-transform:uppercase;color:#6f767e;margin-top:26px;
+  display:flex;align-items:center;gap:11px}
+.c-head::after{content:"";flex:1;height:1px;background:var(--rule-soft)}
+
+.c-why{font-size:.93rem;line-height:1.62;margin-top:11px;color:#b0aea6}
+.c-why em{font-style:normal;color:var(--ochre)}
+
+.c-source{font-family:'IBM Plex Mono',monospace;font-size:.76rem;line-height:1.7;
+  margin-top:11px;color:#a8afb7;border-left:2px solid var(--rule);padding-left:13px}
+
+.c-foot{margin-top:26px;padding-top:13px;border-top:1px solid var(--rule-soft);
+  font-family:'IBM Plex Mono',monospace;font-size:.58rem;letter-spacing:.1em;
+  color:#5f666e;line-height:1.7}
+
+/* ---------- network legend ---------- */
+.legend{
+  position:fixed;left:14px;bottom:calc(env(safe-area-inset-bottom) + 16px);z-index:800;
+  background:rgba(18,22,29,.93);border:1px solid var(--rule);border-radius:2px;
+  padding:11px 14px;backdrop-filter:blur(7px);max-width:70vw;
+  opacity:0;transform:translateY(9px);pointer-events:none;transition:opacity .3s,transform .3s}
+.legend.show{opacity:1;transform:none}
+.legend h2{font-family:'IBM Plex Mono',monospace;font-size:.57rem;letter-spacing:.18em;
+  text-transform:uppercase;color:#6f767e;margin-bottom:8px;font-weight:500}
+.legend .row{display:flex;align-items:center;gap:9px;font-family:'IBM Plex Mono',monospace;
+  font-size:.63rem;color:#a8afb7;margin-top:5px}
+.legend .sw{width:20px;height:0;border-top-width:2px;flex-shrink:0}
+
+.zoom{position:fixed;right:12px;bottom:calc(env(safe-area-inset-bottom) + 16px);
+  z-index:800;display:flex;flex-direction:column;gap:6px}
+.zoom button{width:38px;height:38px;border-radius:2px;background:rgba(18,22,29,.9);
+  border:1px solid var(--rule);color:#9aa0a6;font-size:1rem;cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;transition:color .2s,border-color .2s}
+.zoom button:hover{color:var(--chalk);border-color:var(--craft)}
+.zoom button:focus-visible{outline:2px solid var(--craft);outline-offset:2px}
+
+@media (min-width:760px){
+  .card{left:auto;right:0;top:0;bottom:0;width:414px;max-height:none;
+    border-radius:0;border-top:none;border-left:1px solid var(--rule);
+    transform:translateX(101%)}
+  .card.open{transform:translateX(0)}
+  .grip{display:none}
+  .card-body{padding-top:26px}
+  .closer{display:flex!important}
+}
+.closer{display:none;position:absolute;top:14px;right:16px;z-index:3;
+  background:none;border:none;color:#6f767e;font-size:1.1rem;cursor:pointer;
+  font-family:'IBM Plex Mono',monospace;padding:5px 8px}
+.closer:hover{color:var(--chalk)}
+.closer:focus-visible{outline:2px solid var(--craft)}
+
+@media (prefers-reduced-motion:reduce){
+  .pin{animation:none}
+  .card,.legend,.pin{transition:none}
+}
+</style>
+</head>
+<body>
+
+<div id="map" role="application" aria-label="Map of documented Freemasonry"></div>
+<div id="wash"></div>
+
+<header class="top">
+  <div class="mast">
+    <h1>WARRANT</h1>
+    <span class="sub">every pin carries its paperwork</span>
+  </div>
+  <div class="tally" id="tally">
+    <span class="t-rec"><b id="n-rec">0</b> recorded</span>
+    <span class="t-dis"><b id="n-dis">0</b> disputed</span>
+    <span class="t-leg"><b id="n-leg">0</b> legend</span>
+  </div>
+  <nav class="filters" id="filters" aria-label="Filter by strength of evidence">
+    <button class="f on" data-g="all">All entries</button>
+    <button class="f" data-g="recorded"><i class="glyph"></i>Recorded</button>
+    <button class="f" data-g="disputed"><i class="glyph"></i>Disputed</button>
+    <button class="f" data-g="legend"><i class="glyph"></i>Legend</button>
+    <button class="f link-f" id="linkBtn">⟶ Show networks</button>
+  </nav>
+</header>
+
+<div class="legend" id="legend">
+  <h2>Documented networks</h2>
+  <div class="row"><span class="sw" style="border-top:2px solid #7fa9c8"></span>Regimental warrants — lodges travelling with British and Irish regiments</div>
+  <div class="row"><span class="sw" style="border-top:2px dashed #c08b3e"></span>Lautaro circuit — the Cádiz-to-Lima independence network</div>
+</div>
+
+<div class="zoom">
+  <button onclick="map.zoomIn()" aria-label="Zoom in">+</button>
+  <button onclick="map.zoomOut()" aria-label="Zoom out">−</button>
+</div>
+
+<aside class="card" id="card" aria-label="Entry detail" aria-live="polite">
+  <button class="closer" onclick="closeCard()" aria-label="Close entry">✕</button>
+  <div class="grip" onclick="closeCard()" tabindex="0" role="button" aria-label="Close entry"><span></span></div>
+  <div class="card-body">
+    <div class="slip">
+      <span class="shelf" id="c-shelf">—</span>
+      <span class="stamp" id="c-stamp">—</span>
+    </div>
+    <div class="c-year" id="c-year"></div>
+    <h2 class="c-name" id="c-name"></h2>
+    <div class="c-where" id="c-where"></div>
+    <p class="c-claim" id="c-claim"></p>
+    <p class="c-detail" id="c-detail"></p>
+    <div id="c-whywrap">
+      <div class="c-head">Why it's graded this way</div>
+      <p class="c-why" id="c-why"></p>
+    </div>
+    <div class="c-head">Source</div>
+    <p class="c-source" id="c-source"></p>
+    <p class="c-foot">Grades describe the strength of the surviving record, not the interest of the claim. Legend entries are included because they are the ones most often mapped as fact.</p>
+  </div>
+</aside>
+
+<script>
+/* ============================================================
+   ENTRIES
+   grade: recorded  — primary documents survive and are public
+          disputed  — real evidence, contested reading
+          legend    — widely repeated, record does not support it
+   ============================================================ */
+const ENTRIES = [
+{id:"schaw",yr:"1598",name:"The Schaw Statutes",where:"Edinburgh, Scotland",lat:55.9533,lng:-3.1883,grade:"recorded",
+ claim:"The first written rules for masons' lodges — issued by a royal official, not a secret society.",
+ detail:"William Schaw, Master of Works to James VI, set down statutes governing how Scottish lodges should be run, keep records and admit members. They predate the English grand lodge system by more than a century and are the earliest paperwork the institution has.",
+ why:"The statutes survive in manuscript and are reproduced in full in the standard academic history. There is no interpretive gap here — it is a dated administrative document with a named author.",
+ src:"David Stevenson, <em>The Origins of Freemasonry: Scotland's Century 1590–1710</em> (Cambridge UP, 1988)"},
+
+{id:"marys",yr:"1599",name:"Lodge of Edinburgh (Mary's Chapel)",where:"Edinburgh, Scotland",lat:55.9486,lng:-3.1919,grade:"recorded",
+ claim:"The oldest surviving lodge minutes in the world.",
+ detail:"The minute book opens on 31 July 1599 and has run, with gaps, ever since. Everything the popular histories place in Solomon's Jerusalem or Templar France, the actual paper trail places in late-Renaissance Edinburgh — a working trade body slowly admitting gentlemen who had never cut stone.",
+ why:"The minute book is physically extant and held by the Grand Lodge of Scotland. Its dating is uncontested.",
+ src:"Minute books, Grand Lodge of Scotland, Edinburgh · Stevenson (1988), ch. 3"},
+
+{id:"ashmole",yr:"1646",name:"Elias Ashmole is made a mason",where:"Warrington, England",lat:53.3900,lng:-2.5970,grade:"recorded",
+ claim:"The earliest recorded initiation in England of a man with no trade in stone.",
+ detail:"Ashmole — antiquary, alchemist, founder of the Ashmolean — wrote in his diary that he was made a Free Mason at Warrington on 16 October 1646, and named the men present. It is the moment the record shows the craft turning from a trade into something else.",
+ why:"Ashmole's diaries survive in the Bodleian and were printed in a scholarly edition in 1966. He is describing his own evening, on the day.",
+ src:"C. H. Josten (ed.), <em>Elias Ashmole 1617–1692</em> (Oxford, 1966) · MS Ashmole, Bodleian Library"},
+
+{id:"goose",yr:"1717",name:"Four lodges meet at the Goose and Gridiron",where:"St Paul's Churchyard, London",lat:51.5138,lng:-0.0984,grade:"disputed",
+ claim:"The conventional founding date of organised Freemasonry — on weaker evidence than its fame suggests.",
+ detail:"Four London lodges are said to have combined into the first Grand Lodge at an alehouse by St Paul's. It is the origin story printed on almost everything the institution produces.",
+ why:"The only account comes from James Anderson's <em>New Book of Constitutions</em> of 1738 — written twenty-one years after the fact, by a man with reasons to tidy the story. No contemporary 1717 document describes the meeting. Several historians argue the effective founding is 1721, when the first minute book begins and a nobleman took the chair.",
+ src:"Anderson, <em>New Book of Constitutions</em> (1738) · Andrew Prescott, 'The Unlawful Societies Act of 1799' and subsequent revisionist work · Museum of Freemasonry, London"},
+
+{id:"anderson",yr:"1723",name:"Anderson's Constitutions",where:"London, England",lat:51.5155,lng:-0.0922,grade:"recorded",
+ claim:"The rulebook that invented the ancient lineage while writing the modern rules.",
+ detail:"The first printed constitutions open with a mythic history running back through Solomon's Temple to Adam, then set out entirely practical eighteenth-century regulations. Both halves are in the same book. It is the clearest evidence that the antiquity was authored, and roughly when.",
+ why:"The 1723 edition survives in many copies and has been digitised. What it says is not in question — only how seriously its history was meant.",
+ src:"James Anderson, <em>The Constitutions of the Free-Masons</em> (London, 1723), digitised by the Museum of Freemasonry"},
+
+{id:"ireland",yr:"1725",name:"Grand Lodge of Ireland",where:"Dublin, Ireland",lat:53.3416,lng:-6.2600,grade:"recorded",
+ claim:"The oldest grand lodge in continuous existence after England's.",
+ detail:"Dublin's grand lodge mattered far beyond Ireland: it issued the travelling warrants that let lodges move with army regiments, which is how the craft reached most of the world.",
+ why:"Continuous institutional records from the 1720s onward, held in Dublin.",
+ src:"Grand Lodge of Ireland archives, Molesworth Street, Dublin · Jessica Harland-Jacobs, <em>Builders of Empire</em> (UNC Press, 2007)"},
+
+{id:"clement",yr:"1738",name:"In eminenti apostolatus",where:"Vatican City, Rome",lat:41.9022,lng:12.4539,grade:"recorded",
+ claim:"The first papal condemnation — twenty-one years after the London founding.",
+ detail:"Clement XII forbade Catholics to join, on pain of excommunication. Leo XIII escalated it in 1884 with <em>Humanum genus</em>. The prohibition shaped Freemasonry's political character across Catholic Europe and Latin America for two centuries, pushing it toward anticlerical liberalism in exactly the places the Church was strongest.",
+ why:"Papal bulls are published documents with fixed dates and texts.",
+ src:"<em>In eminenti apostolatus specula</em> (28 April 1738) · <em>Humanum genus</em> (20 April 1884)"},
+
+{id:"franklin",yr:"1734",name:"Benjamin Franklin, Grand Master",where:"Philadelphia, Pennsylvania",lat:39.9496,lng:-75.1503,grade:"recorded",
+ claim:"He printed the first Masonic book in America — because he was a printer.",
+ detail:"Franklin became Grand Master of Pennsylvania and reprinted Anderson's Constitutions in 1734. The often-implied version — that a hidden order placed him — inverts the ordinary explanation: lodges were where colonial men of business met, and Franklin was a man of business who owned a press.",
+ why:"Lodge records, and a surviving imprint with his name on it.",
+ src:"Franklin's 1734 imprint of Anderson · Steven C. Bullock, <em>Revolutionary Brotherhood</em> (UNC Press, 1996)"},
+
+{id:"washington",yr:"1752",name:"George Washington is initiated",where:"Fredericksburg, Virginia",lat:38.3032,lng:-77.4605,grade:"recorded",
+ claim:"Initiated at twenty, and photographed — in paint — laying the Capitol cornerstone in an apron.",
+ detail:"He entered Fredericksburg Lodge on 4 November 1752. On 18 September 1793 he laid the cornerstone of the United States Capitol in full Masonic ceremony, publicly, with the press present. The strangest thing about Washington's Freemasonry is how little of it was hidden.",
+ why:"The lodge holds the original ledger entry. The 1793 ceremony was reported in newspapers at the time.",
+ src:"Fredericksburg Lodge No. 4 ledger · Bullock (1996) · George Washington Masonic National Memorial, Alexandria"},
+
+{id:"princehall",yr:"1784",name:"African Lodge No. 459",where:"Boston, Massachusetts",lat:42.3601,lng:-71.0589,grade:"recorded",
+ claim:"London chartered a Black lodge that American grand lodges would not recognise for two centuries.",
+ detail:"Prince Hall and fourteen other free Black men were initiated in 1775 by a lodge attached to a British regiment stationed in Boston. Refused a warrant by the colonists, Hall applied to London — and got one. Prince Hall Freemasonry grew into a parallel institution, and became a spine of Black civic organising in the United States. Most mainstream American grand lodges only extended recognition in the 1990s.",
+ why:"The English warrant survives, as does the correspondence requesting it.",
+ src:"Warrant of African Lodge No. 459 (1784), Prince Hall Grand Lodge of Massachusetts · Museum of Freemasonry, London"},
+
+{id:"mozart",yr:"1784",name:"Mozart joins Zur Wohltätigkeit",where:"Vienna, Austria",lat:48.2082,lng:16.3738,grade:"recorded",
+ claim:"He put the ritual on stage, and nobody tried to stop him.",
+ detail:"Initiated in December 1784. <em>Die Zauberflöte</em> (1791) uses Masonic initiation structure, imagery and number symbolism openly enough that contemporaries recognised it immediately. If the order guarded its secrets as jealously as legend holds, a hit opera was an odd way to do it.",
+ why:"Viennese lodge records survive, and Mozart's Masonic compositions are catalogued works with dedications.",
+ src:"Lodge records, Vienna · Masonic Funeral Music, K.477 (1785)"},
+
+{id:"lautaro",yr:"1812",name:"The Lautaro circuit",where:"Buenos Aires, Argentina",lat:-34.6037,lng:-58.3816,grade:"disputed",
+ claim:"The secret network behind South American independence — but 'Masonic' is doing contested work.",
+ detail:"San Martín, Alvear and Carlos María de Alvear organised a sworn society running from Cádiz through London to Buenos Aires, Santiago and Lima, with oaths, degrees and cells. It genuinely coordinated the liberation of a continent.",
+ why:"Historians agree the Lautaro lodges existed and mattered. They divide on whether these were Masonic lodges proper, or revolutionary cells that borrowed Masonic form because it was the available technology for organising secretly. Records were deliberately thin by design, which is exactly why the claim can't be settled.",
+ src:"John Dickie, <em>The Craft</em> (Hodder, 2020), ch. on Latin America · contested in Argentine and Chilean historiography"},
+
+{id:"bolivar",yr:"1828",name:"Bolívar bans secret societies",where:"Bogotá, Colombia",lat:4.7110,lng:-74.0721,grade:"disputed",
+ claim:"The most-cited Masonic liberator outlawed the lodges.",
+ detail:"Bolívar was initiated in Europe around 1805–07 and held Scottish Rite degrees. In November 1828 he issued a decree suppressing secret societies across Gran Colombia, lodges included.",
+ why:"The initiation records are thin and partly reconstructed; the 1828 decree is solid. The popular map pins Bolívar as evidence of Masonic design behind independence, and omits the part where he shut them down.",
+ src:"Decree of 8 November 1828 · Dickie (2020)"},
+
+{id:"morgan",yr:"1826",name:"The Morgan affair",where:"Batavia, New York",lat:43.0009,lng:-78.1875,grade:"recorded",
+ claim:"A man announced he would print the rituals, was abducted, and never seen again.",
+ detail:"William Morgan's disappearance triggered the Anti-Masonic Party — the first significant third party in American history, which ran a presidential candidate in 1832 and held the first nominating convention. Lodge membership in the United States collapsed. The institution took decades to recover.",
+ why:"Trials were held, convictions obtained for the abduction, and the political aftermath is in the electoral record. Only Morgan's ultimate fate is unresolved.",
+ src:"Bullock, <em>Revolutionary Brotherhood</em> (1996), ch. 8 · New York State trial records, 1827–31"},
+
+{id:"godf",yr:"1877",name:"The Grand Orient schism",where:"Rue Cadet, Paris",lat:48.8757,lng:2.3437,grade:"recorded",
+ claim:"French Freemasonry dropped God, and English Freemasonry stopped speaking to it.",
+ detail:"The Grand Orient de France removed the requirement that members profess belief in a Supreme Being. The United Grand Lodge of England withdrew recognition. The split has never healed, and it is the reason 'Freemasonry' is not one thing: the Anglo-American and Continental traditions have been institutionally separate for nearly 150 years.",
+ why:"Both sides published their positions at the time and maintain them now.",
+ src:"Grand Orient de France, convent of 1877 · UGLE, <em>Basic Principles for Grand Lodge Recognition</em> (1929)"},
+
+{id:"kipling",yr:"1886",name:"Kipling, Lodge Hope and Perseverance",where:"Lahore, Punjab",lat:31.5204,lng:74.3587,grade:"recorded",
+ claim:"An empire lodge where a Hindu, a Muslim, a Sikh and a Jew sat as equals — inside a system built on hierarchy.",
+ detail:"Kipling was initiated at twenty and wrote 'The Mother Lodge' about it, naming the members by faith and rank. He found the levelling remarkable, which tells you how unusual it was outside the door. The same lodge network was also colonial infrastructure — this is both things at once.",
+ why:"Lodge records survive, and Kipling wrote his own account.",
+ src:"Rudyard Kipling, 'The Mother Lodge' (1896) · Harland-Jacobs, <em>Builders of Empire</em> (2007)"},
+
+{id:"rizal",yr:"1883",name:"José Rizal is initiated in Madrid",where:"Madrid, Spain",lat:40.4168,lng:-3.7038,grade:"recorded",
+ claim:"Spanish lodges gave the Philippine reform movement its meeting rooms and its ritual grammar.",
+ detail:"Rizal joined a Madrid lodge while a student. Filipino reformists used Spanish Masonic networks to organise; the revolutionary Katipunan later adapted Masonic initiation ritual wholesale. The colonial authorities were not wrong that lodges were doing political work — they were wrong about who was directing it.",
+ why:"Spanish lodge records and the Katipunan's own documents survive.",
+ src:"Dickie (2020) · Katipunan initiation documents, National Library of the Philippines"},
+
+{id:"freemasonshall",yr:"1933",name:"Freemasons' Hall",where:"Great Queen Street, London",lat:51.5155,lng:-0.1220,grade:"recorded",
+ claim:"A war memorial the size of a city block, with the archive open to anyone who walks in.",
+ detail:"Built 1927–33 as a memorial to the 3,225 English freemasons killed in the First World War. It houses the Museum of Freemasonry and a public research library. Free entry, open catalogue. It is twenty minutes from Stoke Newington on the Piccadilly line.",
+ why:"It is a Grade II* listed building with a public reading room.",
+ src:"Museum of Freemasonry, Great Queen Street, London WC2B 5AZ"},
+
+{id:"housetemple",yr:"1915",name:"House of the Temple",where:"Washington, D.C.",lat:38.9147,lng:-77.0365,grade:"recorded",
+ claim:"John Russell Pope built a copy of the Mausoleum at Halicarnassus on 16th Street.",
+ detail:"Headquarters of the Scottish Rite's Southern Jurisdiction, completed 1915. Pope went on to design the Jefferson Memorial and the National Gallery West Building. The architecture is deliberately, legibly ancient — a nineteenth-century idea of antiquity rendered in twentieth-century limestone.",
+ why:"Commission records, architect attribution and construction dates are all documented.",
+ src:"Scottish Rite SJ archives · Steven Bedford, <em>John Russell Pope: Architect of Empire</em> (1998)"},
+
+{id:"italy25",yr:"1925",name:"Mussolini dissolves the lodges",where:"Rome, Italy",lat:41.9028,lng:12.4964,grade:"recorded",
+ claim:"The first modern state to outlaw Freemasonry was fascist Italy.",
+ detail:"The law of 26 November 1925 dissolved secret associations. Masonic property was seized and members purged from public life. It set the template followed in Germany, Spain, Portugal and Vichy France.",
+ why:"Published statute with a date in the Italian legal record.",
+ src:"Legge 2029 del 26 novembre 1925 · Dickie (2020), ch. 12"},
+
+{id:"berlin35",yr:"1935",name:"Suppression in Nazi Germany",where:"Berlin, Germany",lat:52.5200,lng:13.4050,grade:"recorded",
+ claim:"Lodges dissolved, members persecuted, and the archives shipped east as intelligence material.",
+ detail:"German lodges were forced to close by 1935. The RSHA collected seized Masonic records and objects as material for an anti-Masonic exhibition and for surveillance files. Much of the collection ended up in Moscow after 1945 and was returned only in the 1990s.",
+ why:"The seizure inventories survive, as does the exhibition's own catalogue.",
+ src:"RSHA Amt VII records · Museum of Freemasonry, London, restitution files"},
+
+{id:"truman",yr:"1940",name:"Harry Truman, Grand Master of Missouri",where:"Jefferson City, Missouri",lat:38.5767,lng:-92.1735,grade:"recorded",
+ claim:"A sitting US senator ran a state grand lodge, and it was in the newspapers.",
+ detail:"Truman was elected Grand Master of Masons in Missouri in 1940 while serving in the Senate, four years before the vice-presidency. He never concealed it. The overlap of lodge and office in mid-century America was ordinary enough to be uninteresting to reporters — which is itself the finding.",
+ why:"Grand Lodge of Missouri records and contemporary press coverage.",
+ src:"Grand Lodge of Missouri proceedings, 1940 · Truman Presidential Library"},
+
+{id:"p2",yr:"1981",name:"Propaganda Due",where:"Arezzo, Italy",lat:43.4633,lng:11.8796,grade:"recorded",
+ claim:"The real conspiracy — and it has a parliamentary report, a membership list and convictions.",
+ detail:"Police searching Licio Gelli's villa found a roster of 962 names: ministers, military officers, intelligence chiefs, bankers, journalists. The P2 lodge had been suspended by the Grand Orient of Italy two years earlier and was operating irregularly. The scandal brought down the Forlani government within weeks. Tina Anselmi's parliamentary commission reported in 1984.",
+ why:"This is the strongest-evidenced entry on the map. A seized document, a named list, a government collapse, a parliamentary inquiry and criminal trials. Anyone looking for a documented case of a lodge used as a covert power network has one — it is Italian, it is specific, and it was prosecuted.",
+ src:"Commissione parlamentare d'inchiesta sulla Loggia massonica P2, <em>Relazione Anselmi</em> (1984) · Dickie (2020), ch. 15"},
+
+{id:"rosslyn",yr:"1446",name:"Rosslyn Chapel",where:"Midlothian, Scotland",lat:55.8553,lng:-3.1601,grade:"legend",
+ claim:"The Templar-Masonic cathedral in stone — attached to the building four centuries after it was built.",
+ detail:"Rosslyn is a genuinely extraordinary late-Gothic chapel begun in 1446. It is also the single most over-interpreted building in Europe, credited with Templar treasure, Masonic ciphers, and pre-Columbian American maize carvings.",
+ why:"Construction predates any Masonic record by 150 years. The Sinclair family's Masonic connection dates from the seventeenth century, well after the chapel. The 'maize' carvings are contested by architectural historians and may be stylised wheat or strawberries. <em>Nearly every layer was added by nineteenth- and twentieth-century writers</em>, and popular fiction after 2003 did the rest.",
+ src:"Rosslyn Chapel Trust's own published history · Stevenson (1988) on the Sinclair connection · Mark Oxbrow & Ian Robertson, <em>Rosslyn and the Grail</em> (2005)"},
+
+{id:"greatseal",yr:"1782",name:"The eye on the dollar",where:"Washington, D.C.",lat:38.8895,lng:-77.0353,grade:"legend",
+ claim:"The most-cited Masonic symbol in the world is not, on the record, Masonic.",
+ detail:"The eye in a triangle above an unfinished pyramid was adopted for the reverse of the Great Seal of the United States in 1782, and put on the dollar bill in 1935.",
+ why:"The design committee's artist, Pierre Eugène du Simitière, was not a freemason. The Eye of Providence was common Christian and Renaissance iconography long before either the seal or organised Freemasonry — it appears in church art across Europe. Freemasonry adopted the all-seeing eye <em>later</em>, around 1797. The direction of borrowing is the opposite of the popular claim, and it is the single clearest example of how a shared visual vocabulary gets read as a signature.",
+ src:"US Department of State, <em>The Great Seal of the United States</em> · Museum of Freemasonry position statement on the Eye of Providence"},
+
+{id:"hongmen",yr:"1904",name:"The 'Chinese Freemasons'",where:"Honolulu, Hawaii",lat:21.3069,lng:-157.8583,grade:"legend",
+ claim:"A translation collision that has put a lot of false lines on a lot of maps.",
+ detail:"Sun Yat-sen was initiated into the Hongmen / Chee Kung Tong, a Chinese sworn brotherhood, which in English-speaking countries traded under the name 'Chinese Freemasons'.",
+ why:"The Hongmen is an entirely separate institution with its own origins in Qing-era resistance societies. It adopted the English name for legal and social convenience in North America. <em>There is no institutional descent from or to European Freemasonry.</em> Maps that draw a line from London to Sun Yat-sen are following a trade name, not a lineage.",
+ src:"Dickie (2020) · scholarship on the Tiandihui and Hongmen diaspora societies"},
+
+{id:"solomon",yr:"c.960 BC",name:"The Temple of Solomon",where:"Jerusalem",lat:31.7780,lng:35.2354,grade:"legend",
+ claim:"The founding myth the institution wrote down for itself in 1723, and has never claimed as history since.",
+ detail:"Masonic ritual is built around the construction of Solomon's Temple and the figure of Hiram Abiff, its chief craftsman.",
+ why:"Anderson's 1723 Constitutions present this as descent; no historian, Masonic or otherwise, defends it as such today. <em>The United Grand Lodge of England's own museum describes the Temple material as allegorical.</em> It belongs on this map as the clearest case of an institution's self-description being mistaken for its record — the thing that happens to every symbol on every logo that gets read this way.",
+ src:"Anderson (1723) · Museum of Freemasonry, London, permanent display texts"}
+];
+
+/* documented network lines */
+const LINKS = {
+  regiments:{colour:"#7fa9c8",dash:null,paths:[
+    [[53.3416,-6.2600],[42.3601,-71.0589]],
+    [[53.3416,-6.2600],[31.5204,74.3587]],
+    [[51.5155,-0.1220],[18.0179,-76.8099]],
+    [[51.5155,-0.1220],[-33.9249,18.4241]]
+  ]},
+  lautaro:{colour:"#c08b3e",dash:"7,7",paths:[
+    [[36.5271,-6.2886],[51.5074,-0.1278]],
+    [[51.5074,-0.1278],[-34.6037,-58.3816]],
+    [[-34.6037,-58.3816],[-33.4489,-70.6693]],
+    [[-33.4489,-70.6693],[-12.0464,-77.0428]]
+  ]}
+};
+
+/* ============ MAP ============ */
+const map = L.map('map',{zoomControl:false,worldCopyJump:true,minZoom:2})
+  .setView([28,-14],2.6);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+  attribution:'&copy; OpenStreetMap &copy; CARTO — entry sources cited individually',
+  subdomains:'abcd',maxZoom:18
+}).addTo(map);
+
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const markers = {};
+let active = "all", selected = null, linksOn = false;
+const linkLayer = L.layerGroup();
+
+ENTRIES.forEach((e,i)=>{
+  const icon = L.divIcon({
+    className:'pin-wrap',
+    html:`<div class="pin pin-${e.grade}" style="animation-delay:${reduce?0:i*32}ms"></div>`,
+    iconSize:[19,19],iconAnchor:[9.5,9.5]
+  });
+  const m = L.marker([e.lat,e.lng],{icon,keyboard:true,title:e.name})
+    .bindTooltip(`${e.yr} · ${e.name}`,{direction:'top',offset:[0,-12],className:'tt'})
+    .on('click',()=>openCard(e.id));
+  m.addTo(map);
+  markers[e.id] = m;
+});
+
+Object.values(LINKS).forEach(set=>{
+  set.paths.forEach(p=>{
+    L.polyline(p,{color:set.colour,weight:1.4,opacity:.55,
+      dashArray:set.dash,className:'link-line'}).addTo(linkLayer);
+  });
+});
+
+/* ============ FILTER ============ */
+function applyFilter(g){
+  active = g;
+  ENTRIES.forEach(e=>{
+    const show = (g==="all"||e.grade===g);
+    const m = markers[e.id];
+    if(show && !map.hasLayer(m)) m.addTo(map);
+    if(!show && map.hasLayer(m)) map.removeLayer(m);
+  });
+  updateTally();
+}
+
+function updateTally(){
+  const vis = ENTRIES.filter(e=>active==="all"||e.grade===active);
+  const c = g=>vis.filter(e=>e.grade===g).length;
+  document.getElementById('n-rec').textContent = c('recorded');
+  document.getElementById('n-dis').textContent = c('disputed');
+  document.getElementById('n-leg').textContent = c('legend');
+}
+
+document.getElementById('filters').addEventListener('click',ev=>{
+  const btn = ev.target.closest('.f');
+  if(!btn) return;
+  if(btn.id==='linkBtn'){
+    linksOn = !linksOn;
+    btn.classList.toggle('on',linksOn);
+    btn.textContent = linksOn ? '⟶ Hide networks' : '⟶ Show networks';
+    document.getElementById('legend').classList.toggle('show',linksOn);
+    linksOn ? linkLayer.addTo(map) : map.removeLayer(linkLayer);
+    return;
+  }
+  document.querySelectorAll('.f[data-g]').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  applyFilter(btn.dataset.g);
+});
+
+/* ============ CARD ============ */
+const card = document.getElementById('card');
+
+function openCard(id){
+  const e = ENTRIES.find(x=>x.id===id);
+  if(!e) return;
+
+  document.querySelectorAll('.pin').forEach(p=>p.classList.remove('sel'));
+  const el = markers[id].getElement();
+  if(el) el.querySelector('.pin')?.classList.add('sel');
+
+  const n = String(ENTRIES.indexOf(e)+1).padStart(3,'0');
+  document.getElementById('c-shelf').textContent = `WRT · ${n} / ${ENTRIES.length}`;
+
+  const stamp = document.getElementById('c-stamp');
+  stamp.textContent = e.grade;
+  stamp.className = 'stamp stamp-'+e.grade;
+
+  document.getElementById('c-year').textContent = e.yr;
+  document.getElementById('c-name').textContent = e.name;
+  document.getElementById('c-where').textContent = e.where;
+  document.getElementById('c-claim').textContent = e.claim;
+  document.getElementById('c-detail').innerHTML = e.detail;
+  document.getElementById('c-why').innerHTML = e.why;
+  document.getElementById('c-source').innerHTML = e.src;
+
+  card.classList.add('open');
+  selected = id;
+  document.querySelector('.card-body').scrollTop = 0;
+
+  const off = window.innerWidth >= 760 ? [-160,0] : [0,-90];
+  map.panTo(markers[id].getLatLng(),{animate:!reduce});
+  setTimeout(()=>map.panBy(off,{animate:!reduce}),reduce?0:260);
+}
+
+function closeCard(){
+  card.classList.remove('open');
+  document.querySelectorAll('.pin').forEach(p=>p.classList.remove('sel'));
+  selected = null;
+}
+
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeCard(); });
+document.querySelector('.grip').addEventListener('keydown',e=>{
+  if(e.key==='Enter'||e.key===' '){ e.preventDefault(); closeCard(); }
+});
+
+updateTally();
+</script>
+</body>
+</html>
